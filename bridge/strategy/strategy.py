@@ -23,6 +23,7 @@ class Strategy:
         self,
     ) -> None:
         self.we_active = False
+        self.prev_ball = aux.Point(0, 0)
 
     def process(self, field: fld.Field) -> list[Optional[Action]]:
         """Game State Management"""
@@ -87,3 +88,12 @@ class Strategy:
         - actions[9] = Actions.BallGrab(0.0)
                 The robot number 9 grabs the ball at an angle of 0.0 (it looks to the right, along the OX axis)
         """
+        ball = field.ball.get_pos()
+        if field.ball.get_vel().mag() > 5.0:
+            k = (ball.y - self.prev_ball.y) / (ball.x - self.prev_ball.x)
+            y = self.prev_ball.y - k * self.prev_ball.x + k * (field.ally_goal.center.x + 100)
+            if y >= field.ally_goal.up.y and y <= field.ally_goal.down.y:
+                # field.strategy_image.draw_circle(aux.Point(field.ally_goal.center.x + 100, y), size_in_mms = 100)      
+                actions[0] = Actions.GoToPointIgnore(aux.Point(field.ally_goal.center.x + 100, y), 0.0)   
+        self.prev_ball = ball
+

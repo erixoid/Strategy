@@ -4,6 +4,7 @@
 import math  # type: ignore  # noqa: F401
 from time import time  # type: ignore  # noqa: F401
 from typing import Optional
+from random import randint
 
 from bridge import const
 from bridge.auxiliary import aux, fld, rbt  # type: ignore  # noqa: F401
@@ -88,12 +89,60 @@ class Strategy:
         - actions[9] = Actions.BallGrab(0.0)
                 The robot number 9 grabs the ball at an angle of 0.0 (it looks to the right, along the OX axis)
         """
+        active_robots: list[int] = []
+        for i in range(16):
+            if field.allies[i].is_used():
+                active_robots.append(i)
+        
+        if len(active_robots) > 0:
+            gk_id = active_robots[0]
+            self.goalkeeper(field=field,actions=actions, idx=gk_id)
         ball = field.ball.get_pos()
-        if field.ball.get_vel().mag() > 5.0:
-            k = (ball.y - self.prev_ball.y) / (ball.x - self.prev_ball.x)
-            y = self.prev_ball.y - k * self.prev_ball.x + k * (field.ally_goal.center.x + 100)
-            if y >= field.ally_goal.up.y and y <= field.ally_goal.down.y:
-                # field.strategy_image.draw_circle(aux.Point(field.ally_goal.center.x + 100, y), size_in_mms = 100)      
-                actions[0] = Actions.GoToPointIgnore(aux.Point(field.ally_goal.center.x + 100, y), 0.0)   
-        self.prev_ball = ball
 
+        if len(active_robots) > 2:
+            attk_id = active_robots[1]
+            actions[active_robots[2]] = Actions.Stop()
+            #Attacker
+            self.attacker(field, actions, gk_id, attk_id)
+        
+    def goalkeeper(self, field: fld.Field, actions: list[Optional[Action]], idx: int):
+        ball = field.ball.get_pos()
+        if ball.x - self.prev_ball.x != 0:
+            if field.ball.get_vel().mag() > 2.0:
+                k = (ball.y - self.prev_ball.y) / (ball.x - self.prev_ball.x)
+
+                if field.ally_color == const.Color.BLUE:
+                    y = self.prev_ball.y - k * self.prev_ball.x + k * (field.ally_goal.center.x + 100)
+                    if y >= field.ally_goal.up.y and y <= field.ally_goal.down.y:
+                        # field.strategy_image.draw_circle(aux.Point(field.ally_goal.center.x + 100, y), size_in_mms = 100)  
+                        ang = (field.ball.get_pos() - field.allies[idx].get_pos()).arg()
+                        actions[idx] = Actions.GoToPointIgnore(aux.Point(field.ally_goal.center.x + 100, y), ang)  
+                else: 
+                    y = self.prev_ball.y - k * self.prev_ball.x + k * (field.ally_goal.center.x - 100)
+                    if y <= field.ally_goal.up.y and y >= field.ally_goal.down.y:
+                        # field.strategy_image.draw_circle(aux.Point(field.ally_goal.center.x + 100, y), size_in_mms = 100)   
+                        ang = (field.ball.get_pos() - field.allies[idx].get_pos()).arg()
+                        actions[idx] = Actions.GoToPointIgnore(aux.Point(field.ally_goal.center.x - 100, y), ang)
+        self.prev_ball = ball
+    def attacker(self, field: fld.Field, actions: list[Optional[Action]], idx_gk: int, idx_at: int):
+        goal_max_y = 350
+        if field.allies[idx_at].get_pos().x - field.allies[idx_gk].get_pos().x != 0:
+            k_up = (field.allies[idx_at].get_pos().y - field.allies[idx_gk].get_pos().y - 100) / (field.allies[idx_at].get_pos().x - field.allies[idx_gk].get_pos().x)
+            b_up = field.allies[idx_at].get_pos().y - k_up * field.allies[idx_at].get_pos().x
+            k_down = (field.allies[idx_at].get_pos().y - field.allies[idx_gk].get_pos().y + 100) / (field.allies[idx_at].get_pos().x - field.allies[idx_gk].get_pos().x)
+            b_down = field.allies[idx_at].get_pos().y - k_down * field.allies[idx_at].get_pos().x
+            y_kick_up = k_up * 2250 + b_up
+            y_kick_down = k_down*2250 + b_down
+            field.strategy_image.draw_line(field.allies[idx_at].get_pos(), aux.Point(2250, y_kick_up))
+            field.strategy_image.draw_line(field.allies[idx_at].get_pos(), aux.Point(2250, y_kick_down))
+            #kicking the ball
+            if (y_kick_up > goal_max_y and y_kick_down > goal_max_y) or (y_kick_up < -goal_max_y and y_kick_down < -goal_max_y):
+                actions[idx_at] = KickActions.Straight(aux.Point(2250, 0))
+                field.strategy_image.draw_circle(aux.Point(2250, 0))
+            else:
+                if (goal_max_y - y_kick_up) > (y_kick_down + goal_max_y):
+                    actions[idx_at] = KickActions.Straight(aux.Point(2250, goal_max_y))
+                    field.strategy_image.draw_circle(aux.Point(2250, goal_max_y))
+                else:
+                    actions[idx_at] = KickActions.Straight(aux.Point(2250, -goal_max_y))
+                    field.strategy_image.draw_circle(aux.Point(2250, -goal_max_y))

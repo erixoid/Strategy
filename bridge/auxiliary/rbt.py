@@ -58,7 +58,7 @@ class Robot(entity.Entity):
         gains_full = [2, 0.01, 0.3]  # 0.9 for average moving, 1.7 for rickochet and ball catching
         gains_catch = [2.8, 0.01, 0.87]  # for ricochet and pass receiving
         if color == const.COLOR and self.r_id == const.GK:
-            gains_full = [2, 0.01, 0.3] ################# пропорциональная дифференциальная ...
+            gains_full = [2.8, 0.01, 0.3] ################# пропорциональная дифференциальная ...
             gains_catch = [2.8, 0.01, 0.5]
         a_gains_full = [15, 0.5]
         if const.IS_SIMULATOR_USED:

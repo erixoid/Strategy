@@ -29,7 +29,7 @@ class Strategy:
         self.active_robots: list[int] = []
         self.active_enemies: list[int] = []
         self.pas = False
-        self.pos = 1
+        self.regim = False
 
     def process(self, field: fld.Field) -> list[Optional[Action]]:
         """Game State Management"""
@@ -111,7 +111,7 @@ class Strategy:
             gk_id = self.active_robots[0]
             if len(self.active_enemies) > 0:
                 self.attacker(field, actions, gk_en, at1_id, at2_id)
-                self.attacker2(field, actions, at1_id, at2_id, gk_en)
+                self.attacker2(field, actions, at1_id, at2_id)
             self.goalkeeper(field=field,actions=actions, idx_gk=gk_id, idx_at=at1_id, idx_at2=at2_id)
             
             #Attacker
@@ -119,42 +119,36 @@ class Strategy:
         
     def goalkeeper(self, field: fld.Field, actions: list[Optional[Action]], idx_gk: int, idx_at: int, idx_at2: int):
         ball = field.ball.get_pos()
-        if field.ball.get_vel().mag() < 30.0 or field.is_ball_in(idx_gk) == True:
+        if field.ball.get_vel().mag() < 30.0 or field.is_ball_in(field.allies[idx_gk]) == True:
             if aux.is_point_inside_poly(ball, field.ally_goal.hull):
+                self.regim = True
                 if self.que == 1:
+
                     actions[idx_gk] = KickActions.Straight(field.allies[idx_at].get_pos())
                 else:
                     actions[idx_gk] = KickActions.Straight(field.allies[idx_at2].get_pos())
                 kick = True
             else:
                 kick = False
+                self.regim = False
         else:
             kick = False
+            self.regim = False
         if ball.x - self.prev_ball.x != 0:
             if field.ball.get_vel().mag() > 1.0 and kick != True:
                 k = (ball.y - self.prev_ball.y) / (ball.x - self.prev_ball.x)
-
-                if field.ally_color == const.Color.BLUE:
-
-                    y = self.prev_ball.y - k * self.prev_ball.x + k * (field.ally_goal.center.x + 110)
-                    if y >= -400 and y <= 400:
-                        # field.strategy_image.draw_circle(aux.Point(field.ally_goal.center.x + 100, y), size_in_mms = 100)  
-                        ang = (field.ball.get_pos() - field.allies[idx_gk].get_pos()).arg()
-                        actions[idx_gk] = Actions.GoToPoint(aux.Point(field.ally_goal.center.x + 110, y), field.ally_goal.eye_forw.arg(), ball_catch=True)
-                    else:
-                        ang = (field.ball.get_pos() - field.allies[idx_gk].get_pos()).arg()
-                        actions[idx_gk] = Actions.GoToPoint(aux.Point(field.ally_goal.center.x + 110, 0), field.ally_goal.eye_forw.arg(), ball_catch=True)    
-                else: 
+                y = self.prev_ball.y - k * self.prev_ball.x + k * (field.ally_goal.center.x + field.polarity * -1 * 100)
+                if y >= -400 and y <= 400:
+                    # field.strategy_image.draw_circle(aux.Point(field.ally_goal.center.x + 100, y), size_in_mms = 100)  
                     ang = (field.ball.get_pos() - field.allies[idx_gk].get_pos()).arg()
-                    y = self.prev_ball.y - k * self.prev_ball.x + k * (field.ally_goal.center.x + 110)
-                    if y <= 400 and y >= -400:
-                        actions[idx_gk] = Actions.GoToPoint(aux.Point(field.ally_goal.center.x - 110, y), field.ally_goal.eye_forw.arg())
-                    else:
-                        ang = (field.ball.get_pos() - field.allies[idx_gk].get_pos()).arg()
-                        actions[idx_gk] = Actions.GoToPoint(aux.Point(field.ally_goal.center.x - 110, 0), field.ally_goal.eye_forw.arg()) 
+                    actions[idx_gk] = Actions.GoToPoint(aux.Point(field.ally_goal.center.x + field.polarity * -1 * 100, y), field.ally_goal.eye_forw.arg(), ball_catch=True)
+                else:
+                    ang = (field.ball.get_pos() - field.allies[idx_gk].get_pos()).arg()
+                    actions[idx_gk] = Actions.GoToPoint(aux.Point(field.ally_goal.center.x + field.polarity * -1 * 100, 0), field.ally_goal.eye_forw.arg(), ball_catch=True)    
+
         
     def attacker(self, field: fld.Field, actions: list[Optional[Action]], idx_gk: int, idx_at: int, idx_at2: int):
-        goal_max_y = 310
+        goal_max_y = 305
         if field.allies[idx_at].get_pos().x - field.enemies[idx_gk].get_pos().x != 0:
             list_p = aux.get_tangent_points(field.enemies[idx_gk].get_pos(), field.allies[idx_at].get_pos(), 100)
             # if list_p[0].y > list_p[1]:
@@ -172,7 +166,8 @@ class Strategy:
             field.strategy_image.draw_line(field.allies[idx_at].get_pos(), aux.Point(field.enemy_goal.center.x, y_kick_up))
             field.strategy_image.draw_line(field.allies[idx_at].get_pos(), aux.Point(field.enemy_goal.center.x, y_kick_down))
             #kicking the ball
-            if self.que == 1:
+
+            if self.regim == False:
                 if len(self.active_enemies) > 2:
                     dist1 = (field.enemies[self.active_enemies[1]].get_pos() - field.allies[idx_at].get_pos()).mag()
                     dist2 = (field.enemies[self.active_enemies[2]].get_pos() - field.allies[idx_at].get_pos()).mag()
@@ -223,79 +218,86 @@ class Strategy:
                             actions[idx_at] = KickActions.Straight(aux.Point(field.enemy_goal.center.x, -goal_max_y))
                             field.strategy_image.draw_circle(aux.Point(field.enemy_goal.center.x, -goal_max_y))
             else:
-
                 ang = (field.ball.get_pos() - field.allies[idx_at].get_pos()).arg()
-                if self.pos == 1:
-                    actions[idx_at] = Actions.GoToPoint(aux.Point(field.polarity * -1 * 1400, 600), ang)
-                else:
-                    actions[idx_at] = Actions.GoToPoint(aux.Point(field.polarity * -1 * 1000, 600), ang)
+                actions[idx_at] = Actions.GoToPoint(aux.Point(field.polarity * 2000, -900), ang)
 
-    def attacker2(self, field: fld.Field, actions: list[Optional[Action]], idx_at1: int, idx_at: int, idx_gk: int):
+    def attacker2(self, field: fld.Field, actions: list[Optional[Action]], idx_at1: int, idx_at: int):
         goal_max_y = 310
-        if field.allies[idx_at].get_pos().x - field.enemies[idx_gk].get_pos().x != 0:
-            k_up = (field.allies[idx_at].get_pos().y - field.enemies[idx_gk].get_pos().y - 100) / (field.allies[idx_at].get_pos().x - field.enemies[idx_gk].get_pos().x)
-            b_up = field.allies[idx_at].get_pos().y - k_up * field.allies[idx_at].get_pos().x
-            k_down = (field.allies[idx_at].get_pos().y - field.enemies[idx_gk].get_pos().y + 100) / (field.allies[idx_at].get_pos().x - field.enemies[idx_gk].get_pos().x)
-            b_down = field.allies[idx_at].get_pos().y - k_down * field.allies[idx_at].get_pos().x
-            y_kick_up = k_up * field.enemy_goal.center.x + b_up
-            y_kick_down = k_down*field.enemy_goal.center.x + b_down
-            field.strategy_image.draw_line(field.allies[idx_at].get_pos(), aux.Point(field.enemy_goal.center.x, y_kick_up))
-            field.strategy_image.draw_line(field.allies[idx_at].get_pos(), aux.Point(field.enemy_goal.center.x, y_kick_down))
+        # if field.allies[idx_at].get_pos().x - field.enemies[idx_gk].get_pos().x != 0:
+        #     k_up = (field.allies[idx_at].get_pos().y - field.enemies[idx_gk].get_pos().y - 100) / (field.allies[idx_at].get_pos().x - field.enemies[idx_gk].get_pos().x)
+        #     b_up = field.allies[idx_at].get_pos().y - k_up * field.allies[idx_at].get_pos().x
+        #     k_down = (field.allies[idx_at].get_pos().y - field.enemies[idx_gk].get_pos().y + 100) / (field.allies[idx_at].get_pos().x - field.enemies[idx_gk].get_pos().x)
+        #     b_down = field.allies[idx_at].get_pos().y - k_down * field.allies[idx_at].get_pos().x
+        #     y_kick_up = k_up * field.enemy_goal.center.x + b_up
+        #     y_kick_down = k_down*field.enemy_goal.center.x + b_down
+        #     field.strategy_image.draw_line(field.allies[idx_at].get_pos(), aux.Point(field.enemy_goal.center.x, y_kick_up))
+        #     field.strategy_image.draw_line(field.allies[idx_at].get_pos(), aux.Point(field.enemy_goal.center.x, y_kick_down))
             #kicking the ball
-            if self.que==2:
-                if len(self.active_enemies) > 2:
-                    dist1 = (field.enemies[self.active_enemies[1]].get_pos() - field.allies[idx_at].get_pos()).mag()
-                    dist2 = (field.enemies[self.active_enemies[2]].get_pos() - field.allies[idx_at].get_pos()).mag()
+            # if self.que==2:
+        ball = field.ball.get_pos()
+        if ball.x - self.prev_ball.x != 0:
+            if field.ball.get_vel().mag() > 1.0:
+                k = (ball.y - self.prev_ball.y) / (ball.x - self.prev_ball.x)
+                y = self.prev_ball.y - k * self.prev_ball.x + k * (field.polarity * 1630 + field.polarity * -1 * 110)
+                if y >= -700 and y <= 700:
+                    # field.strategy_image.draw_circle(aux.Point(field.ally_goal.center.x + 100, y), size_in_mms = 100)  
+                    ang = (field.ball.get_pos() - field.allies[idx_at].get_pos()).arg()
+                    actions[idx_at] = Actions.GoToPoint(aux.Point(field.polarity * 1630 + field.polarity * -1 * 110, y), ang, ball_catch=True)
 
-                    if (dist1 < 230) or (dist2 < 230):
-                        if aux.line_circle_intersect(field.allies[idx_at].get_pos(), field.allies[idx_at1].get_pos(), field.allies[self.active_enemies[1]].get_pos(), 100, is_inf="S") is None:
-                            if aux.line_circle_intersect(field.allies[idx_at].get_pos(), field.allies[idx_at1].get_pos(), field.allies[self.active_enemies[2]].get_pos(), 100, is_inf="S") is None:
-                                ang = (field.ball.get_pos() - field.allies[idx_at].get_pos()).arg()
-                                if len(self.active_robots) > 2:
-                                    ang2 = (field.allies[idx_at1].get_pos() - field.allies[idx_at].get_pos()).arg()
-                                    if field.is_ball_in(field.allies[idx_at]) == True:
-                                        if abs(field.allies[idx_at].get_angle() - ang2) < 1:
-                                            actions[idx_at] = KickActions.Straight(field.allies[idx_at1].get_pos())
-                                        else:
-                                            actions[idx_at] = Actions.GoToPoint(field.allies[idx_at].get_pos(), ang2)
-                                    else:
-                                        actions[idx_at] = Actions.BallGrab(ang)
-                                self.pas = True
+
+        if len(self.active_enemies) > 2:
+                dist1 = (field.enemies[self.active_enemies[1]].get_pos() - field.allies[idx_at].get_pos()).mag()
+                dist2 = (field.enemies[self.active_enemies[2]].get_pos() - field.allies[idx_at].get_pos()).mag()
+
+                    # if (dist1 < 230) or (dist2 < 230):
+                    #     if aux.line_circle_intersect(field.allies[idx_at].get_pos(), field.allies[idx_at1].get_pos(), field.allies[self.active_enemies[1]].get_pos(), 100, is_inf="S") is None:
+                    #         if aux.line_circle_intersect(field.allies[idx_at].get_pos(), field.allies[idx_at1].get_pos(), field.allies[self.active_enemies[2]].get_pos(), 100, is_inf="S") is None:
+                    #             ang = (field.ball.get_pos() - field.allies[idx_at].get_pos()).arg()
+                    #             if len(self.active_robots) > 2:
+                    #                 ang2 = (field.allies[idx_at1].get_pos() - field.allies[idx_at].get_pos()).arg()
+                    #                 if field.is_ball_in(field.allies[idx_at]) == True:
+                    #                     if abs(field.allies[idx_at].get_angle() - ang2) < 1:
+                    #                         actions[idx_at] = KickActions.Straight(field.allies[idx_at1].get_pos())
+                    #                     else:
+                    #                         actions[idx_at] = Actions.GoToPoint(field.allies[idx_at].get_pos(), ang2)
+                    #                 else:
+                    #                     actions[idx_at] = Actions.BallGrab(ang)
+                    #             self.pas = True
                                 
-                                if self.is_kicked(field, actions, idx_at):
-                                    self.que = 2
-                                    self.pas = False
-                            else:
-                                if self.pos == 2:
-                                    self.pos = 1
-                                else:
-                                    self.pos = 2
-                        else:
-                            if self.pos == 2:
-                                self.pos = 1
-                            else:
-                                self.pos = 2
-                    else:
-                        self.pas = False
+                    #             if self.is_kicked(field, actions, idx_at):
+                    #                 self.que = 2
+                    #                 self.pas = False
+                    #         else:
+                    #             if self.pos == 2:
+                    #                 self.pos = 1
+                    #             else:
+                    #                 self.pos = 2
+                    #     else:
+                    #         if self.pos == 2:
+                    #             self.pos = 1
+                    #         else:
+                    #             self.pos = 2
+                    # else:
+                    #     self.pas = False
 
-                if ((y_kick_up > goal_max_y and y_kick_down > goal_max_y) or (y_kick_up < -goal_max_y and y_kick_down < -goal_max_y)):
-                    if self.pas == False:
-                        actions[idx_at] = KickActions.Straight(aux.Point(field.enemy_goal.center.x, 0))
-                        field.strategy_image.draw_circle(aux.Point(field.enemy_goal.center.x, 0))
-                else:
-                    if self.pas == False:
-                        if (goal_max_y - y_kick_up) > (y_kick_down + goal_max_y):
-                            actions[idx_at] = KickActions.Straight(aux.Point(field.enemy_goal.center.x, goal_max_y))
-                            field.strategy_image.draw_circle(aux.Point(field.enemy_goal.center.x, goal_max_y))
-                        else:
-                            actions[idx_at] = KickActions.Straight(aux.Point(field.enemy_goal.center.x, -goal_max_y))
-                            field.strategy_image.draw_circle(aux.Point(field.enemy_goal.center.x, -goal_max_y))
-            else:
-                ang = (field.ball.get_pos() - field.allies[idx_at].get_pos()).arg()
-                if self.pos == 1:
-                    actions[idx_at] = Actions.GoToPoint(aux.Point(field.polarity * -1 * 1400, -600), ang)
-                else:
-                    actions[idx_at] = Actions.GoToPoint(aux.Point(field.polarity * -1 * 1000, -600), ang)
+            # if ((y_kick_up > goal_max_y and y_kick_down > goal_max_y) or (y_kick_up < -goal_max_y and y_kick_down < -goal_max_y)):
+            #     if self.pas == False:
+            #         actions[idx_at] = KickActions.Straight(aux.Point(field.enemy_goal.center.x, 0))
+            #         field.strategy_image.draw_circle(aux.Point(field.enemy_goal.center.x, 0))
+            # else:
+            #     if self.pas == False:
+            #         if (goal_max_y - y_kick_up) > (y_kick_down + goal_max_y):
+            #             actions[idx_at] = KickActions.Straight(aux.Point(field.enemy_goal.center.x, goal_max_y))
+            #             field.strategy_image.draw_circle(aux.Point(field.enemy_goal.center.x, goal_max_y))
+            #         else:
+            #             actions[idx_at] = KickActions.Straight(aux.Point(field.enemy_goal.center.x, -goal_max_y))
+            #             field.strategy_image.draw_circle(aux.Point(field.enemy_goal.center.x, -goal_max_y))
+        # else:
+        #     ang = (field.ball.get_pos() - field.allies[idx_at].get_pos()).arg()
+        #     if self.pos == 1:
+        #         actions[idx_at] = Actions.GoToPoint(aux.Point(field.polarity * -1 * 1400, -600), ang)
+        #     else:
+        #         actions[idx_at] = Actions.GoToPoint(aux.Point(field.polarity * -1 * 1000, -600), ang)
 
     def is_kicked(self, field: fld.Field, actions: list[Optional[Action]], idx: int):
         ball = field.ball.get_pos()
@@ -373,22 +375,24 @@ class Strategy:
             ang1 = (field.ball.get_pos() - field.allies[self.active_robots[1]].get_pos()).arg()
             ang2 = (field.ball.get_pos() - field.allies[self.active_robots[2]].get_pos()).arg()
             ang3 = (field.ball.get_pos() - field.allies[self.active_robots[0]].get_pos()).arg()
-            actions[self.active_robots[1]] = Actions.GoToPoint(aux.Point(field.polarity * 150, 600), ang1)
+            actions[self.active_robots[1]] = Actions.GoToPoint(aux.Point(field.polarity * 150, 0), ang1)
             actions[self.active_robots[0]] = Actions.GoToPoint(aux.Point(field.ally_goal.center.x - field.polarity * 100, 0), ang3)
-            actions[self.active_robots[2]] = Actions.GoToPoint(aux.Point(field.polarity * 100, 0), ang2)
+            actions[self.active_robots[2]] = Actions.GoToPoint(aux.Point(field.polarity * 1600, 0), ang2)
     def kickoff(self, field: fld.Field, actions: list[Actions]):
         if self.we_active:
             if len(self.active_robots) > 1:
                 ang = (field.ball.get_pos() - field.allies[self.active_robots[1]].get_pos()).arg()
-                actions[self.active_robots[2]] = KickActions.Straight(field.allies[self.active_robots[2]].get_pos(), voltage=10)
+                at1_id = self.active_robots[1]
+                at2_id = self.active_robots[2]
+                gk_id = self.active_robots[0]
                 # if self.is_kicked(field, actions, self.active_robots[1]) == True:
                 #     self.que = 2
-                actions[self.active_robots[1]] = Actions.GoToPoint(aux.Point(field.polarity * 100, 600), ang)
+                self.attacker(field, actions, gk_id, at1_id, at2_id)
         else:
             if len(self.active_robots) > 2:
                 ang1 = (field.ball.get_pos() - field.allies[self.active_robots[1]].get_pos()).arg()
                 ang2 = (field.ball.get_pos() - field.allies[self.active_robots[2]].get_pos()).arg()
                 ang3 = (field.ball.get_pos() - field.allies[self.active_robots[0]].get_pos()).arg()
-                actions[self.active_robots[2]] = Actions.GoToPoint(aux.Point(field.polarity * 1200, 600), ang2)
+                actions[self.active_robots[2]] = Actions.GoToPoint(aux.Point(field.polarity * 1600, 0), ang2)
                 actions[self.active_robots[1]] = Actions.GoToPoint(aux.Point(field.polarity * 400, 0), ang1)
                 actions[self.active_robots[0]] = Actions.GoToPoint(aux.Point((field.ally_goal.center.x - field.polarity * 100), 0), ang3)
